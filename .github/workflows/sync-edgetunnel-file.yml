@@ -68,7 +68,7 @@ jobs:
             numbersToExpressions: false,
             simplify: true,
             splitStrings: true,
-            splitStringsChunkLength: 5,
+            splitStringsChunkLength: 3,
             transformObjectKeys: false,
             unicodeEscapeSequence: false,
             selfDefending: false,
