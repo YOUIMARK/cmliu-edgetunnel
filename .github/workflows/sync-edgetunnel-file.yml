@@ -47,39 +47,36 @@ jobs:
             console.error('错误：源文件 ' + sourceFileName + ' 为空。');
             process.exit(1);
           }
+
           const obfuscationOptions = {
-              compact: true,
-              controlFlowFlattening: false,
-              controlFlowFlatteningThreshold: 0,
-              deadCodeInjection: false,
-              stringArray: true,
-              stringArrayEncoding: ['base64'],
-              stringArrayThreshold: 1.0,
-              stringArrayRotate: true,
-              stringArrayShuffle: true,
-              stringArrayWrappersCount: 2,
-              stringArrayWrappersChainedCalls: false,
-              stringArrayWrappersParametersMaxCount: 3,
-              renameGlobals: true,
-              identifierNamesGenerator: 'mangled-shuffled',
-              identifierNamesCache: null,
-              identifiersPrefix: '',
-              renameProperties: false,
-              renamePropertiesMode: 'safe',
-              ignoreImports: false,
-              target: 'browser',
-              numbersToExpressions: false,
-              simplify: false,
-              splitStrings: true,
-              splitStringsChunkLength: 1,
-              transformObjectKeys: false,
-              unicodeEscapeSequence: true,
-              selfDefending: false,
-              debugProtection: false,
-              debugProtectionInterval: 0,
-              disableConsoleOutput: true,
-              domainLock: []
+            compact: true,
+            controlFlowFlattening: false,
+            deadCodeInjection: false,
+            stringArray: true,
+            stringArrayEncoding: ['base64'],
+            stringArrayThreshold: 0.8,
+            stringArrayRotate: true,
+            stringArrayShuffle: true,
+            stringArrayWrappersCount: 2,
+            stringArrayWrappersChainedCalls: false,
+            stringArrayWrappersParametersMaxCount: 3,
+            renameGlobals: false,
+            identifierNamesGenerator: 'mangled-shuffled',
+            renameProperties: false,
+            ignoreImports: true,
+            target: 'browser-no-eval',
+            numbersToExpressions: false,
+            simplify: true,
+            splitStrings: true,
+            splitStringsChunkLength: 5,
+            transformObjectKeys: false,
+            unicodeEscapeSequence: false,
+            selfDefending: false,
+            debugProtection: false,
+            disableConsoleOutput: false,
+            domainLock: []
           };
+
           const obfuscatedCode = JavaScriptObfuscator.obfuscate(originalCode, obfuscationOptions).getObfuscatedCode();
           
           fs.writeFileSync(path.join(process.cwd(), outputFileName), obfuscatedCode, 'utf8');
