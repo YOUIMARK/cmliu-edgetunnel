@@ -1,4 +1,5 @@
 name: Sync and Obfuscate
+
 on:
   schedule:
     - cron: "0 6 * * *"
@@ -8,41 +9,51 @@ on:
       - main
     paths:
       - '明文源吗'
+
 permissions:
   contents: write
+
 jobs:
   sync-and-obfuscate:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
+
       - name: Install Obfuscator
         run: npm install javascript-obfuscator
+
       - name: Download and overwrite files
         run: |
           curl -fsSL --max-time 60 "https://raw.githubusercontent.com/cmliu/edgetunnel/main/_worker.js" -o "明文源吗"
+
       - name: Obfuscate from local source file
         run: |
           cat > obfuscate.js << 'EOF'
           const JavaScriptObfuscator = require('javascript-obfuscator');
           const fs = require('fs');
           const path = require('path');
-          
+
           const sourceFileName = '明文源吗';
           const outputFileName = '_worker.js';
           const sourceFilePath = path.join(process.cwd(), sourceFileName);
+
           if (!fs.existsSync(sourceFilePath)) {
             console.error('错误：在路径 \'' + sourceFilePath + '\' 未找到源文件。');
             process.exit(1);
           }
+
           const originalCode = fs.readFileSync(sourceFilePath, 'utf8');
+
           if (!originalCode || originalCode.trim().length === 0) {
             console.error('错误：源文件 ' + sourceFileName + ' 为空。');
             process.exit(1);
@@ -50,46 +61,68 @@ jobs:
 
           const obfuscationOptions = {
             compact: true,
-            controlFlowFlattening: false,
-            deadCodeInjection: false,
+            simplify: false,
+            target: 'browser-no-eval',
+            ignoreImports: true,
             stringArray: true,
             stringArrayEncoding: ['base64'],
-            stringArrayThreshold: 0.8,
+            stringArrayThreshold: 1.0,
             stringArrayRotate: true,
             stringArrayShuffle: true,
             stringArrayWrappersCount: 2,
-            stringArrayWrappersChainedCalls: false,
-            stringArrayWrappersParametersMaxCount: 3,
-            renameGlobals: false,
+            stringArrayWrappersChainedCalls: true,
+            stringArrayWrappersParametersMaxCount: 4,
+            stringArrayIndexShift: true,
+            stringArrayIndexesType: ['hexadecimal-number'],
             identifierNamesGenerator: 'mangled-shuffled',
+            identifiersPrefix: '_0x',
+            renameGlobals: true,
+            renameLocalVariables: true,
             renameProperties: false,
-            ignoreImports: true,
-            target: 'browser-no-eval',
-            numbersToExpressions: false,
-            simplify: true,
+            renamePropertiesMode: 'safe',
+            controlFlowFlattening: true,
+            controlFlowFlatteningThreshold: 0.5,
+            deadCodeInjection: true,
+            deadCodeInjectionThreshold: 0.2,
+            numbersToExpressions: true,
             splitStrings: true,
-            splitStringsChunkLength: 3,
-            transformObjectKeys: false,
+            splitStringsChunkLength: 4,
+            transformObjectKeys: true,
             unicodeEscapeSequence: false,
             selfDefending: false,
             debugProtection: false,
-            disableConsoleOutput: false,
-            domainLock: []
+            disableConsoleOutput: true,
+            seed: 0,
+            allowAsync: true,
+            sourceMap: false,
+            domainLock: [],
+            exclude: [],
+            forceTransformStrings: [],
           };
 
-          const obfuscatedCode = JavaScriptObfuscator.obfuscate(originalCode, obfuscationOptions).getObfuscatedCode();
-          
-          fs.writeFileSync(path.join(process.cwd(), outputFileName), obfuscatedCode, 'utf8');
-          console.log('成功将 \'' + sourceFileName + '\' 混淆并保存至 \'' + outputFileName + '\'。');
+          try {
+            console.log('开始混淆...');
+            const obfuscatedCode = JavaScriptObfuscator.obfuscate(originalCode, obfuscationOptions).getObfuscatedCode();
+            fs.writeFileSync(path.join(process.cwd(), outputFileName), obfuscatedCode, 'utf8');
+            const originalSize = Buffer.byteLength(originalCode, 'utf8');
+            const obfuscatedSize = Buffer.byteLength(obfuscatedCode, 'utf8');
+            console.log('原始大小: ' + (originalSize / 1024).toFixed(2) + ' KB');
+            console.log('混淆后大小: ' + (obfuscatedSize / 1024).toFixed(2) + ' KB');
+            console.log('膨胀率: ' + ((obfuscatedSize / originalSize) * 100).toFixed(1) + '%');
+            console.log('完成：\'' + sourceFileName + '\' → \'' + outputFileName + '\'');
+          } catch (err) {
+            console.error('混淆失败：' + err.message);
+            console.error(err.stack);
+            process.exit(1);
+          }
           EOF
           node obfuscate.js
+
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           git add "明文源吗" "_worker.js"
-
           if git diff --staged --quiet; then
             echo "No changes, skipping."
           else
