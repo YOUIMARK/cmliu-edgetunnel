@@ -1,4 +1,4 @@
-﻿const Version = '2026-04-16 04:47:24';
+﻿const Version = '2026-04-17 01:57:56';
 /*In our project workflow, we first*/ import //the necessary modules, 
 /*then*/ { connect }//to the central server, 
 /*and all data flows*/ from//this single source.
@@ -2723,9 +2723,10 @@ class TlsClient {
 	async decryptTls13Handshake(ciphertext) {
 		const nonce = xorSequenceIntoIv(this.serverHandshakeIv, this.serverSeqNum++),
 			additionalData = tlsBytes(CONTENT_TYPE_APPLICATION_DATA, 3, 3, uint16be(ciphertext.length));
-		if (this.cipherConfig.chacha) return chacha20Poly1305Decrypt(this.serverHandshakeKey, nonce, ciphertext, additionalData);
-		if (!this.serverHandshakeCryptoKey) this.serverHandshakeCryptoKey = await importAesGcmKey(this.serverHandshakeKey, ["decrypt"]);
-		return aesGcmDecryptWithKey(this.serverHandshakeCryptoKey, nonce, ciphertext, additionalData)
+		const decrypted = this.cipherConfig.chacha ? await chacha20Poly1305Decrypt(this.serverHandshakeKey, nonce, ciphertext, additionalData) : await aesGcmDecryptWithKey(this.serverHandshakeCryptoKey || (this.serverHandshakeCryptoKey = await importAesGcmKey(this.serverHandshakeKey, ["decrypt"])), nonce, ciphertext, additionalData);
+		let innerTypeIndex = decrypted.length - 1;
+		for (; innerTypeIndex >= 0 && !decrypted[innerTypeIndex];) innerTypeIndex--;
+		return innerTypeIndex < 0 ? EMPTY_BYTES : decrypted.slice(0, innerTypeIndex + 1)
 	}
 	async encryptTls13(data) {
 		const plaintext = concatBytes(data, [CONTENT_TYPE_APPLICATION_DATA]),
@@ -2739,9 +2740,15 @@ class TlsClient {
 		const nonce = xorSequenceIntoIv(this.serverAppIv, this.serverSeqNum++),
 			additionalData = tlsBytes(CONTENT_TYPE_APPLICATION_DATA, 3, 3, uint16be(ciphertext.length)),
 			plaintext = this.cipherConfig.chacha ? await chacha20Poly1305Decrypt(this.serverAppKey, nonce, ciphertext, additionalData) : await aesGcmDecryptWithKey(this.serverAppCryptoKey || (this.serverAppCryptoKey = await importAesGcmKey(this.serverAppKey, ["decrypt"])), nonce, ciphertext, additionalData);
+		let innerTypeIndex = plaintext.length - 1;
+		for (; innerTypeIndex >= 0 && !plaintext[innerTypeIndex];) innerTypeIndex--;
+		if (innerTypeIndex < 0) return {
+			data: EMPTY_BYTES,
+			type: 0
+		};
 		return {
-			data: plaintext.subarray(0, plaintext.length - 1),
-			type: plaintext[plaintext.length - 1]
+			data: plaintext.slice(0, innerTypeIndex),
+			type: plaintext[innerTypeIndex]
 		}
 	}
 	async write(data) {
@@ -2773,6 +2780,10 @@ class TlsClient {
 				if (!this.isTls13) return this.decryptTls12(record.fragment, CONTENT_TYPE_APPLICATION_DATA);
 				const { data, type } = await this.decryptTls13(record.fragment);
 				if (type === CONTENT_TYPE_APPLICATION_DATA) return data;
+				if (type === CONTENT_TYPE_ALERT) {
+					if (data[1] === ALERT_CLOSE_NOTIFY) return null;
+					throw new Error(`TLS Alert: ${data[1]}`)
+				}
 				if (type !== CONTENT_TYPE_HANDSHAKE) continue;
 				let message;
 				for (this.handshakeParser.feed(data); message = this.handshakeParser.next();)
